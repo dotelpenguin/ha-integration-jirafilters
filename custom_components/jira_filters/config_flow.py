@@ -4,7 +4,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import requests
+try:
+    import requests
+except ImportError:
+    _LOGGER.error("requests library is not available. Please ensure it's installed.")
+    raise
+
 import voluptuous as vol
 
 from homeassistant import config_entries

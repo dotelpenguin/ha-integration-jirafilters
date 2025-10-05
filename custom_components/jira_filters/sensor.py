@@ -5,7 +5,12 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-import requests
+try:
+    import requests
+except ImportError:
+    _LOGGER.error("requests library is not available. Please ensure it's installed.")
+    raise
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -43,23 +48,27 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Jira Filters sensor based on a config entry."""
-    coordinator = JiraFiltersCoordinator(hass, config_entry)
-    
-    # Fetch initial data so we have data when entities are added
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        coordinator = JiraFiltersCoordinator(hass, config_entry)
+        
+        # Fetch initial data so we have data when entities are added
+        await coordinator.async_config_entry_first_refresh()
 
-    # Create a sensor for each filter
-    entities = []
-    for filter_config in config_entry.data.get("filters", []):
-        entities.append(
-            JiraFilterSensor(
-                coordinator,
-                filter_config["filter_id"],
-                filter_config["filter_name"]
+        # Create a sensor for each filter
+        entities = []
+        for filter_config in config_entry.data.get("filters", []):
+            entities.append(
+                JiraFilterSensor(
+                    coordinator,
+                    filter_config["filter_id"],
+                    filter_config["filter_name"]
+                )
             )
-        )
 
-    async_add_entities(entities)
+        async_add_entities(entities)
+    except Exception as err:
+        _LOGGER.error("Error setting up Jira Filters sensors: %s", err)
+        raise
 
 
 class JiraFiltersCoordinator(DataUpdateCoordinator):
@@ -92,14 +101,18 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
 
     def _fetch_jira_data(self) -> dict[str, Any]:
         """Fetch data from Jira API."""
-        session = requests.Session()
-        session.auth = (self.email, self.api_token)
-        session.headers.update({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        })
+        try:
+            session = requests.Session()
+            session.auth = (self.email, self.api_token)
+            session.headers.update({
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            })
 
-        results = {}
+            results = {}
+        except Exception as e:
+            _LOGGER.error("Failed to create requests session: %s", e)
+            raise
         
         for filter_config in self.config_entry.data.get("filters", []):
             filter_id = filter_config["filter_id"]
