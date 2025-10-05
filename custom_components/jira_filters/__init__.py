@@ -23,7 +23,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN][entry.entry_id] = entry.data
 
         # Forward the setup to the sensor platform.
-        await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+        try:
+            # Try newer API first
+            await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+        except AttributeError:
+            # Fallback to older API
+            await hass.config_entries.async_forward_entry_setup(entry, "sensor")
         return True
     except Exception as err:
         _LOGGER.error("Error setting up Jira Filters integration: %s", err)
@@ -32,7 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    try:
+        # Try newer API first
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    except AttributeError:
+        # Fallback to older API
+        unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
 
