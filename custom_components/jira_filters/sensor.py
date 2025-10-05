@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+_LOGGER = logging.getLogger(__name__)
+
 try:
     import requests
 except ImportError:
@@ -38,8 +40,6 @@ from .const import (
     ATTR_ISSUE_UPDATED,
     ATTR_ISSUE_CREATED,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
