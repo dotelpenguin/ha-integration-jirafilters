@@ -1,0 +1,42 @@
+{
+  "title": "Jira Filters",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Jira Filters Setup",
+        "description": "Configure your Jira connection details. You'll need your Jira Cloud URL, email address, and API token.",
+        "data": {
+          "base_url": "Jira Base URL",
+          "email": "Email Address", 
+          "api_token": "API Token",
+          "max_results": "Max Results",
+          "refresh_minutes": "Refresh Interval (minutes)"
+        }
+      },
+      "filter": {
+        "title": "Add Jira Filter",
+        "description": "Add a Jira filter to monitor. You can find the Filter ID in the URL when viewing a saved filter in Jira.",
+        "data": {
+          "filter_id": "Filter ID",
+          "filter_name": "Filter Name (optional)"
+        }
+      },
+      "add_more": {
+        "title": "Add More Filters",
+        "description": "Would you like to add another filter? You can always add more later through the integration options.",
+        "data": {
+          "add_more": "Add another filter"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Jira. Please check your credentials and URL.",
+      "invalid_auth": "Invalid authentication credentials. Please verify your email and API token.",
+      "invalid_filter": "Filter not found or not accessible. Please check the Filter ID and ensure you have permission to view this filter.",
+      "unknown": "An unexpected error occurred. Please try again."
+    },
+    "abort": {
+      "already_configured": "This Jira instance is already configured."
+    }
+  }
+}
