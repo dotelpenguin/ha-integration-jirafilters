@@ -150,35 +150,26 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                     ],
                 }
 
-                # Prefer GET (legacy behavior) for widest compatibility; fall back to POST and newer endpoints if needed
+                # Prefer new Jira endpoint first to avoid 410 warnings
                 try:
-                    _LOGGER.debug("Using GET /rest/api/3/search for filter %s", filter_id)
-                    get_response = session.get(
-                        f"{self.base_url}/rest/api/3/search",
-                        params={
-                            'jql': jql,
-                            'maxResults': self.max_results,
-                            'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
-                        },
+                    _LOGGER.debug("Using POST /rest/api/3/search/jql for filter %s", filter_id)
+                    jql_response = session.post(
+                        f"{self.base_url}/rest/api/3/search/jql",
+                        json=search_payload,
                         timeout=30,
                         verify=True,
                     )
-                    get_response.raise_for_status()
-                    search_response = get_response
+                    jql_response.raise_for_status()
+                    search_response = jql_response
                 except requests.exceptions.HTTPError:
-                    status = getattr(get_response, 'status_code', None)
-                    try:
-                        body = get_response.text
-                    except Exception:
-                        body = None
-                    _LOGGER.warning(
-                        "GET /rest/api/3/search failed (status %s) for filter %s; body: %s. Trying POST",
-                        status,
+                    jql_status = getattr(jql_response, 'status_code', None)
+                    # Fall back to legacy POST, then legacy GET only if needed
+                    _LOGGER.debug(
+                        "POST /rest/api/3/search/jql failed with status %s for filter %s; trying legacy endpoints",
+                        jql_status,
                         filter_id,
-                        body,
                     )
                     try:
-                        _LOGGER.debug("Using POST /rest/api/3/search for filter %s", filter_id)
                         post_response = session.post(
                             f"{self.base_url}/rest/api/3/search",
                             json=search_payload,
@@ -188,30 +179,22 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                         post_response.raise_for_status()
                         search_response = post_response
                     except requests.exceptions.HTTPError:
-                        post_status = getattr(post_response, 'status_code', None)
-                        try:
-                            post_body = post_response.text
-                        except Exception:
-                            post_body = None
-                        # Jira says to migrate to /rest/api/3/search/jql; try that next
-                        _LOGGER.warning(
-                            "Switching to POST /rest/api/3/search/jql for filter %s after status %s; body: %s",
+                        _LOGGER.debug(
+                            "POST /rest/api/3/search failed; trying GET /rest/api/3/search for filter %s",
                             filter_id,
-                            post_status,
-                            post_body,
                         )
-                        jql_response = session.post(
-                            f"{self.base_url}/rest/api/3/search/jql",
-                            json=search_payload,
+                        get_response = session.get(
+                            f"{self.base_url}/rest/api/3/search",
+                            params={
+                                'jql': jql,
+                                'maxResults': self.max_results,
+                                'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
+                            },
                             timeout=30,
                             verify=True,
                         )
-                        try:
-                            jql_body = jql_response.text if jql_response.status_code >= 400 else None
-                        except Exception:
-                            jql_body = None
-                        jql_response.raise_for_status()
-                        search_response = jql_response
+                        get_response.raise_for_status()
+                        search_response = get_response
                 search_data = search_response.json()
                 
                 issues = search_data.get("issues", [])
