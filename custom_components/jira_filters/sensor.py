@@ -131,19 +131,70 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 jql = filter_data.get("jql", "")
                 
                 # Search for issues using the filter's JQL
-                search_params = {
+                search_payload = {
                     'jql': jql,
                     'maxResults': self.max_results,
-                    'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks'
+                    'fields': [
+                        'summary',
+                        'status',
+                        'assignee',
+                        'priority',
+                        'issuetype',
+                        'updated',
+                        'created',
+                        'parent',
+                        'labels',
+                        'project',
+                        'components',
+                        'issuelinks',
+                    ],
                 }
-                
-                search_response = session.get(
-                    f"{self.base_url}/rest/api/3/search",
-                    params=search_params,
-                    timeout=30,
-                    verify=True
-                )
-                search_response.raise_for_status()
+
+                # Prefer new Jira endpoint first to avoid 410 warnings
+                try:
+                    _LOGGER.debug("Using POST /rest/api/3/search/jql for filter %s", filter_id)
+                    jql_response = session.post(
+                        f"{self.base_url}/rest/api/3/search/jql",
+                        json=search_payload,
+                        timeout=30,
+                        verify=True,
+                    )
+                    jql_response.raise_for_status()
+                    search_response = jql_response
+                except requests.exceptions.HTTPError:
+                    jql_status = getattr(jql_response, 'status_code', None)
+                    # Fall back to legacy POST, then legacy GET only if needed
+                    _LOGGER.debug(
+                        "POST /rest/api/3/search/jql failed with status %s for filter %s; trying legacy endpoints",
+                        jql_status,
+                        filter_id,
+                    )
+                    try:
+                        post_response = session.post(
+                            f"{self.base_url}/rest/api/3/search",
+                            json=search_payload,
+                            timeout=30,
+                            verify=True,
+                        )
+                        post_response.raise_for_status()
+                        search_response = post_response
+                    except requests.exceptions.HTTPError:
+                        _LOGGER.debug(
+                            "POST /rest/api/3/search failed; trying GET /rest/api/3/search for filter %s",
+                            filter_id,
+                        )
+                        get_response = session.get(
+                            f"{self.base_url}/rest/api/3/search",
+                            params={
+                                'jql': jql,
+                                'maxResults': self.max_results,
+                                'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
+                            },
+                            timeout=30,
+                            verify=True,
+                        )
+                        get_response.raise_for_status()
+                        search_response = get_response
                 search_data = search_response.json()
                 
                 issues = search_data.get("issues", [])
