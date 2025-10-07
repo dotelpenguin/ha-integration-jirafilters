@@ -1,11 +1,8 @@
 {
   "name": "Jira Filters",
-  "content_in_root": false,
-  "filename": "jira_filters",
-  "country": ["US", "GB", "CA", "AU", "NZ"],
-  "homeassistant": "2023.1.0",
   "render_readme": true,
-  "iot_class": "Cloud Polling",
-  "hacs": "1.6.0",
-  "categories": ["integration"]
+  "homeassistant": "2023.1.0",
+  "zip_release": true,
+  "domains": ["jira_filters"],
+  "country": ["US", "GB", "CA", "AU", "NZ"]
 }
