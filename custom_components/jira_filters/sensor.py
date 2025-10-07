@@ -152,6 +152,7 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
 
                 # Jira Cloud may return 410 for deprecated GET search; use POST with JSON body
                 try:
+                    _LOGGER.debug("Using POST /rest/api/3/search for filter %s", filter_id)
                     search_response = session.post(
                         f"{self.base_url}/rest/api/3/search",
                         json=search_payload,
@@ -162,8 +163,17 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 except requests.exceptions.HTTPError as http_err:
                     # Graceful fallback: if server still expects GET, retry once
                     if getattr(search_response, 'status_code', None) == 410:
+                        _LOGGER.error(
+                            "Jira returned 410 Gone for POST search on filter %s; not retrying GET to avoid deprecated endpoint.",
+                            filter_id,
+                        )
                         raise
                     # Retry GET once for compatibility
+                    _LOGGER.warning(
+                        "POST search failed with status %s; retrying GET /rest/api/3/search for filter %s",
+                        getattr(search_response, 'status_code', 'unknown'),
+                        filter_id,
+                    )
                     compat_response = session.get(
                         f"{self.base_url}/rest/api/3/search",
                         params={
