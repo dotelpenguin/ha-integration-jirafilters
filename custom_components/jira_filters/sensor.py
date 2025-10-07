@@ -138,7 +138,7 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 }
                 
                 search_response = session.get(
-                    f"{self.base_url}/rest/api/3/search/jql",
+                    f"{self.base_url}/rest/api/3/search",
                     params=search_params,
                     timeout=30,
                     verify=True

@@ -2,6 +2,12 @@
 
 A Home Assistant integration that connects to Jira Cloud instances to monitor filter results and display issue counts and details as sensors.
 
+
+
+## Developer Note
+
+- This is my first Home Assistant integration. I have relied heavily on AI for the integration workflows and Home Assistant components. Feel free to make suggestions, merge requests, or fork this.
+
 ## Features
 
 - Connect to Jira Cloud using V3 API
@@ -139,9 +145,76 @@ template:
 - Consider reducing `max_results` if you experience timeouts
 - Increase `refresh_minutes` to reduce API calls
 
-## Development
+## Known Issues
 
-This integration is based on the existing `jira_view_filter.py` script and extends it for Home Assistant integration.
+### Current Limitations
+
+1. **API Rate Limiting**: Jira Cloud has rate limits that may cause temporary failures during high usage; recommend refresh of 5 minutes or longer
+2. **Large Filter Performance**: Filters with thousands of issues may cause timeouts or slow responses
+3. **Authentication Token Expiry**: API tokens may expire and need to be regenerated periodically
+4. **Network Connectivity**: Requires stable internet connection to Jira Cloud
+5. **Filter Permissions**: Users must have appropriate permissions to access configured filters
+6. **Non-standard Jira projects**: Integration assumes you are using a fairly standard project configuration
+
+
+## FAQ
+
+### General Questions
+
+**Q: Can I use this with Jira Server (on-premises) instead of Jira Cloud?**
+A: No, this integration is specifically designed for Jira Cloud using the v3 REST API. Jira Server uses different authentication methods and API endpoints. The v2 API is EOL, and I do not have access to any on‑premises installations for testing.
+
+**Q: How many filters can I monitor?**
+A: There's no hard limit, but performance may degrade with many filters. We recommend monitoring 10-20 filters maximum for optimal performance.
+
+**Q: Can I monitor filters from different Jira instances?**
+A: Yes. Each integration instance connects to one Jira Cloud instance. Create a new integration instance for each Jira instance you wish to monitor.
+
+**Q: What happens if my Jira instance is down?**
+A: The sensors will show "unavailable" state and log errors. They will automatically recover when Jira is back online.
+
+**Q: Why use a Jira Filter and not JQL?**
+A: JQL requires significantly more parsing, validation, and error handling. Filters are managed and validated by Jira’s API, simplifying the integration while remaining flexible.
+
+### Configuration Questions
+
+**Q: What's the minimum refresh interval and why?**
+A: The minimum is 5 minutes to respect Jira's API rate limits and prevent excessive API calls.
+
+
+**Q: What's the maximum number of issues I can fetch per filter?**
+A: The default is 100, but you can increase this. However, very large numbers may cause timeouts or performance issues.
+
+**Q: Do I need to restart Home Assistant after adding new filters?**
+A: No, you can add new filters through the integration configuration without restarting.
+
+### Troubleshooting Questions
+
+**Q: My sensor shows "unknown" state - what should I do?**
+A: Check the Home Assistant logs for error messages. Common causes include invalid credentials, network issues, or incorrect filter IDs.
+
+**Q: I'm getting authentication errors - what's wrong?**
+A: Verify your email address and API token are correct. Make sure the API token hasn't expired and has the necessary permissions.
+
+**Q: The integration worked before but stopped working - what changed?**
+A: Your API token may have expired, or there may be network connectivity issues. Check the logs and verify your credentials.
+
+**Q: Can I see more detailed error information?**
+A: Yes, enable debug logging in Home Assistant for the `custom_components.jira_filters` logger to see detailed error messages.
+
+**Q: Why are some issue details missing or showing as "None"?**
+A: This depends on your Jira project configuration. Some fields may not be enabled or may not have values for certain issues.
+
+### Performance Questions
+
+**Q: The integration is slow - how can I improve performance?**
+A: Reduce the number of filters, decrease `max_results`, or increase the refresh interval. Also ensure you have a stable internet connection.
+
+**Q: Will this integration impact my Jira instance performance?**
+A: The integration makes minimal API calls and respects rate limits, so it should have negligible impact on your Jira instance.
+
+**Q: Can I run multiple instances of this integration?**
+A: Yes, but each instance will make separate API calls, so consider the total impact on your Jira instance.
 
 ### Requirements
 
