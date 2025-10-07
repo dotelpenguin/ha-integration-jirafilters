@@ -193,55 +193,25 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                             post_body = post_response.text
                         except Exception:
                             post_body = None
-                        if post_status == 410:
-                            _LOGGER.warning(
-                                "POST /rest/api/3/search returned 410 for filter %s; body: %s. Trying /rest/api/3/jql/search",
-                                filter_id,
-                                post_body,
-                            )
-                        else:
-                            _LOGGER.warning(
-                                "POST /rest/api/3/search failed (status %s) for filter %s; body: %s. Trying /rest/api/3/jql/search",
-                                post_status,
-                                filter_id,
-                                post_body,
-                            )
-                        # Try alternative endpoints introduced by Jira Cloud
-                        alt_response = session.post(
-                            f"{self.base_url}/rest/api/3/jql/search",
+                        # Jira says to migrate to /rest/api/3/search/jql; try that next
+                        _LOGGER.warning(
+                            "Switching to POST /rest/api/3/search/jql for filter %s after status %s; body: %s",
+                            filter_id,
+                            post_status,
+                            post_body,
+                        )
+                        jql_response = session.post(
+                            f"{self.base_url}/rest/api/3/search/jql",
                             json=search_payload,
                             timeout=30,
                             verify=True,
                         )
-                        if alt_response.status_code == 410:
-                            try:
-                                alt_body = alt_response.text
-                            except Exception:
-                                alt_body = None
-                            _LOGGER.warning(
-                                "/rest/api/3/jql/search returned 410 for filter %s; body: %s. Trying /rest/api/3/search/jql",
-                                filter_id,
-                                alt_body,
-                            )
-                            alt_response2 = session.post(
-                                f"{self.base_url}/rest/api/3/search/jql",
-                                json=search_payload,
-                                timeout=30,
-                                verify=True,
-                            )
-                            try:
-                                alt2_body = alt_response2.text if alt_response2.status_code >= 400 else None
-                            except Exception:
-                                alt2_body = None
-                            alt_response2.raise_for_status()
-                            search_response = alt_response2
-                        else:
-                            try:
-                                alt_body = alt_response.text if alt_response.status_code >= 400 else None
-                            except Exception:
-                                alt_body = None
-                            alt_response.raise_for_status()
-                            search_response = alt_response
+                        try:
+                            jql_body = jql_response.text if jql_response.status_code >= 400 else None
+                        except Exception:
+                            jql_body = None
+                        jql_response.raise_for_status()
+                        search_response = jql_response
                 search_data = search_response.json()
                 
                 issues = search_data.get("issues", [])
