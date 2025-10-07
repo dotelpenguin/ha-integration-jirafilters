@@ -1,0 +1,24 @@
+name: Release Test (manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create ZIP
+        run: |
+          mkdir -p dist
+          zip -r dist/jira_filters.zip custom_components/jira_filters -x "**/__pycache__/**" -x "**/*.pyc"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jira_filters-zip
+          path: dist/jira_filters.zip
+
+
