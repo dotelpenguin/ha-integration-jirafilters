@@ -131,19 +131,51 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 jql = filter_data.get("jql", "")
                 
                 # Search for issues using the filter's JQL
-                search_params = {
+                search_payload = {
                     'jql': jql,
                     'maxResults': self.max_results,
-                    'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks'
+                    'fields': [
+                        'summary',
+                        'status',
+                        'assignee',
+                        'priority',
+                        'issuetype',
+                        'updated',
+                        'created',
+                        'parent',
+                        'labels',
+                        'project',
+                        'components',
+                        'issuelinks',
+                    ],
                 }
-                
-                search_response = session.get(
-                    f"{self.base_url}/rest/api/3/search",
-                    params=search_params,
-                    timeout=30,
-                    verify=True
-                )
-                search_response.raise_for_status()
+
+                # Jira Cloud may return 410 for deprecated GET search; use POST with JSON body
+                try:
+                    search_response = session.post(
+                        f"{self.base_url}/rest/api/3/search",
+                        json=search_payload,
+                        timeout=30,
+                        verify=True,
+                    )
+                    search_response.raise_for_status()
+                except requests.exceptions.HTTPError as http_err:
+                    # Graceful fallback: if server still expects GET, retry once
+                    if getattr(search_response, 'status_code', None) == 410:
+                        raise
+                    # Retry GET once for compatibility
+                    compat_response = session.get(
+                        f"{self.base_url}/rest/api/3/search",
+                        params={
+                            'jql': jql,
+                            'maxResults': self.max_results,
+                            'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
+                        },
+                        timeout=30,
+                        verify=True,
+                    )
+                    compat_response.raise_for_status()
+                    search_response = compat_response
                 search_data = search_response.json()
                 
                 issues = search_data.get("issues", [])
