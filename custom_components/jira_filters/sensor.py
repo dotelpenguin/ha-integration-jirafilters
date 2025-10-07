@@ -167,10 +167,15 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                     search_response = get_response
                 except requests.exceptions.HTTPError:
                     status = getattr(get_response, 'status_code', None)
+                    try:
+                        body = get_response.text
+                    except Exception:
+                        body = None
                     _LOGGER.warning(
-                        "GET /rest/api/3/search failed with status %s for filter %s; trying POST",
+                        "GET /rest/api/3/search failed (status %s) for filter %s; body: %s. Trying POST",
                         status,
                         filter_id,
+                        body,
                     )
                     try:
                         _LOGGER.debug("Using POST /rest/api/3/search for filter %s", filter_id)
@@ -184,16 +189,22 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                         search_response = post_response
                     except requests.exceptions.HTTPError:
                         post_status = getattr(post_response, 'status_code', None)
+                        try:
+                            post_body = post_response.text
+                        except Exception:
+                            post_body = None
                         if post_status == 410:
                             _LOGGER.warning(
-                                "POST /rest/api/3/search returned 410 for filter %s; trying /rest/api/3/jql/search",
+                                "POST /rest/api/3/search returned 410 for filter %s; body: %s. Trying /rest/api/3/jql/search",
                                 filter_id,
+                                post_body,
                             )
                         else:
                             _LOGGER.warning(
-                                "POST /rest/api/3/search failed with status %s for filter %s; trying /rest/api/3/jql/search",
+                                "POST /rest/api/3/search failed (status %s) for filter %s; body: %s. Trying /rest/api/3/jql/search",
                                 post_status,
                                 filter_id,
+                                post_body,
                             )
                         # Try alternative endpoints introduced by Jira Cloud
                         alt_response = session.post(
@@ -203,9 +214,14 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                             verify=True,
                         )
                         if alt_response.status_code == 410:
+                            try:
+                                alt_body = alt_response.text
+                            except Exception:
+                                alt_body = None
                             _LOGGER.warning(
-                                "/rest/api/3/jql/search returned 410 for filter %s; trying /rest/api/3/search/jql",
+                                "/rest/api/3/jql/search returned 410 for filter %s; body: %s. Trying /rest/api/3/search/jql",
                                 filter_id,
+                                alt_body,
                             )
                             alt_response2 = session.post(
                                 f"{self.base_url}/rest/api/3/search/jql",
@@ -213,9 +229,17 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                                 timeout=30,
                                 verify=True,
                             )
+                            try:
+                                alt2_body = alt_response2.text if alt_response2.status_code >= 400 else None
+                            except Exception:
+                                alt2_body = None
                             alt_response2.raise_for_status()
                             search_response = alt_response2
                         else:
+                            try:
+                                alt_body = alt_response.text if alt_response.status_code >= 400 else None
+                            except Exception:
+                                alt_body = None
                             alt_response.raise_for_status()
                             search_response = alt_response
                 search_data = search_response.json()
