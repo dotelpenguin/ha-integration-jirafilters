@@ -150,23 +150,52 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                     ],
                 }
 
-                # Jira Cloud may return 410 for deprecated GET search; use POST with JSON body
+                # Prefer GET (legacy behavior) for widest compatibility; fall back to POST and newer endpoints if needed
                 try:
-                    _LOGGER.debug("Using POST /rest/api/3/search for filter %s", filter_id)
-                    search_response = session.post(
+                    _LOGGER.debug("Using GET /rest/api/3/search for filter %s", filter_id)
+                    get_response = session.get(
                         f"{self.base_url}/rest/api/3/search",
-                        json=search_payload,
+                        params={
+                            'jql': jql,
+                            'maxResults': self.max_results,
+                            'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
+                        },
                         timeout=30,
                         verify=True,
                     )
-                    search_response.raise_for_status()
-                except requests.exceptions.HTTPError as http_err:
-                    # If 410 Gone, try the newer endpoints introduced by Jira Cloud
-                    if getattr(search_response, 'status_code', None) == 410:
-                        _LOGGER.warning(
-                            "POST /rest/api/3/search returned 410 for filter %s; trying /rest/api/3/jql/search",
-                            filter_id,
+                    get_response.raise_for_status()
+                    search_response = get_response
+                except requests.exceptions.HTTPError:
+                    status = getattr(get_response, 'status_code', None)
+                    _LOGGER.warning(
+                        "GET /rest/api/3/search failed with status %s for filter %s; trying POST",
+                        status,
+                        filter_id,
+                    )
+                    try:
+                        _LOGGER.debug("Using POST /rest/api/3/search for filter %s", filter_id)
+                        post_response = session.post(
+                            f"{self.base_url}/rest/api/3/search",
+                            json=search_payload,
+                            timeout=30,
+                            verify=True,
                         )
+                        post_response.raise_for_status()
+                        search_response = post_response
+                    except requests.exceptions.HTTPError:
+                        post_status = getattr(post_response, 'status_code', None)
+                        if post_status == 410:
+                            _LOGGER.warning(
+                                "POST /rest/api/3/search returned 410 for filter %s; trying /rest/api/3/jql/search",
+                                filter_id,
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "POST /rest/api/3/search failed with status %s for filter %s; trying /rest/api/3/jql/search",
+                                post_status,
+                                filter_id,
+                            )
+                        # Try alternative endpoints introduced by Jira Cloud
                         alt_response = session.post(
                             f"{self.base_url}/rest/api/3/jql/search",
                             json=search_payload,
@@ -175,7 +204,7 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                         )
                         if alt_response.status_code == 410:
                             _LOGGER.warning(
-                                "POST /rest/api/3/jql/search also returned 410 for filter %s; trying /rest/api/3/search/jql",
+                                "/rest/api/3/jql/search returned 410 for filter %s; trying /rest/api/3/search/jql",
                                 filter_id,
                             )
                             alt_response2 = session.post(
@@ -189,25 +218,6 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                         else:
                             alt_response.raise_for_status()
                             search_response = alt_response
-                    else:
-                        # Retry GET once for compatibility on other errors
-                        _LOGGER.warning(
-                            "POST search failed with status %s; retrying GET /rest/api/3/search for filter %s",
-                            getattr(search_response, 'status_code', 'unknown'),
-                            filter_id,
-                        )
-                        compat_response = session.get(
-                            f"{self.base_url}/rest/api/3/search",
-                            params={
-                                'jql': jql,
-                                'maxResults': self.max_results,
-                                'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
-                            },
-                            timeout=30,
-                            verify=True,
-                        )
-                        compat_response.raise_for_status()
-                        search_response = compat_response
                 search_data = search_response.json()
                 
                 issues = search_data.get("issues", [])
