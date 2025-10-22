@@ -2,5 +2,5 @@
   "name": "Jira Filters",
   "render_readme": true,
   "homeassistant": "2023.1.0",
-  "zip_release": false,
+  "zip_release": false
 }
