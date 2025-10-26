@@ -29,6 +29,7 @@ from .const import (
     ATTR_FILTER_NAME,
     ATTR_JQL,
     ATTR_TOTAL_COUNT,
+    ATTR_MORE_ISSUES_AVAILABLE,
     ATTR_ISSUES,
     ATTR_MOST_RECENT_TICKET,
     ATTR_LAST_UPDATED,
@@ -51,9 +52,6 @@ async def async_setup_entry(
     try:
         coordinator = JiraFiltersCoordinator(hass, config_entry)
         
-        # Fetch initial data so we have data when entities are added
-        await coordinator.async_config_entry_first_refresh()
-
         # Create a sensor for each filter
         entities = []
         for filter_config in config_entry.data.get("filters", []):
@@ -66,6 +64,17 @@ async def async_setup_entry(
             )
 
         async_add_entities(entities)
+        
+        # Store coordinator in hass data for dynamic updates
+        hass.data[DOMAIN][config_entry.entry_id]["coordinator"] = coordinator
+        
+        # Try to fetch initial data, but don't fail setup if it doesn't work
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception as refresh_err:
+            _LOGGER.warning("Failed to fetch initial data during setup: %s", refresh_err)
+            _LOGGER.info("Sensors will be created but may show 'unavailable' until connection is established")
+        
     except Exception as err:
         _LOGGER.error("Error setting up Jira Filters sensors: %s", err)
         raise
@@ -90,6 +99,20 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=self.refresh_minutes),
         )
 
+    def update_config(self, config_entry: ConfigEntry) -> None:
+        """Update coordinator configuration when config entry changes."""
+        self.config_entry = config_entry
+        self.base_url = config_entry.data["base_url"].rstrip("/")
+        self.email = config_entry.data["email"]
+        self.api_token = config_entry.data["api_token"]
+        self.max_results = config_entry.data.get("max_results", 100)
+        self.refresh_minutes = config_entry.data.get("refresh_minutes", 5)
+        
+        # Update the refresh interval
+        self.update_interval = timedelta(minutes=self.refresh_minutes)
+        
+        _LOGGER.info("Updated coordinator configuration")
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
@@ -97,7 +120,16 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 self._fetch_jira_data
             )
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with Jira API: {err}") from err
+            # Provide more specific error messages for common issues
+            error_msg = str(err)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                raise UpdateFailed("Authentication failed. Please check your email and API token in the integration settings.") from err
+            elif "403" in error_msg or "Forbidden" in error_msg:
+                raise UpdateFailed("Access forbidden. Please check your permissions for the Jira filters.") from err
+            elif "404" in error_msg or "Not Found" in error_msg:
+                raise UpdateFailed("Jira server not found. Please check your base URL.") from err
+            else:
+                raise UpdateFailed(f"Error communicating with Jira API: {err}") from err
 
     def _fetch_jira_data(self) -> dict[str, Any]:
         """Fetch data from Jira API."""
@@ -339,6 +371,7 @@ class JiraFilterSensor(CoordinatorEntity, SensorEntity):
             ATTR_FILTER_NAME: filter_data.get('filter_name'),
             ATTR_JQL: filter_data.get('jql'),
             ATTR_TOTAL_COUNT: filter_data.get('total_count', 0),
+            ATTR_MORE_ISSUES_AVAILABLE: filter_data.get('total_count', 0) > 10,
             ATTR_LAST_UPDATED: filter_data.get('last_updated'),
         }
 
