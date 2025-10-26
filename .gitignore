@@ -113,3 +113,6 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Test files
+test.sh

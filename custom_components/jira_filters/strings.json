@@ -7,18 +7,19 @@
         "description": "Configure your Jira connection details. You'll need your Jira Cloud URL, email address, and API token.",
         "data": {
           "base_url": "Jira Base URL",
-          "email": "Email Address", 
+          "email": "Email Address",
           "api_token": "API Token",
+          "name": "Connection Name (optional - will use URL basename if empty)",
           "max_results": "Max Results",
           "refresh_minutes": "Refresh Interval (minutes)"
         }
       },
       "filter": {
         "title": "Add Jira Filter",
-        "description": "Add a Jira filter to monitor. You can find the Filter ID in the URL when viewing a saved filter in Jira.",
+        "description": "Add a Jira filter to monitor. You can find the Filter ID in the URL when viewing a saved filter in Jira.\n\nIf you don't provide a filter name, the system will automatically use the name from Jira.\n\n{test_result}",
         "data": {
           "filter_id": "Filter ID",
-          "filter_name": "Filter Name (optional)"
+          "filter_name": "Filter Name (optional - will use Jira name if empty)"
         }
       },
       "add_more": {
@@ -33,10 +34,71 @@
       "cannot_connect": "Unable to connect to Jira. Please check your credentials and URL.",
       "invalid_auth": "Invalid authentication credentials. Please verify your email and API token.",
       "invalid_filter": "Filter not found or not accessible. Please check the Filter ID and ensure you have permission to view this filter.",
+      "no_filters": "No filters configured. Please add a filter first.",
+      "filter_id_required": "Please enter a Filter ID before testing.",
+      "test_failed": "Filter test failed: {test_error}",
+      "test_error": "An error occurred while testing the filter.",
       "unknown": "An unexpected error occurred. Please try again."
     },
     "abort": {
       "already_configured": "This Jira instance is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Jira Filters Options",
+        "description": "Choose what you'd like to configure."
+      },
+      "server_settings": {
+        "title": "Edit Server Settings",
+        "description": "Update your Jira connection settings. Current URL: {current_url}, Current Email: {current_email}",
+        "data": {
+          "base_url": "Jira Base URL",
+          "email": "Email Address",
+          "api_token": "API Token",
+          "name": "Connection Name (optional - will use URL basename if empty)",
+          "max_results": "Max Results",
+          "refresh_minutes": "Refresh Interval (minutes)"
+        }
+      },
+      "manage_filters": {
+        "title": "Manage Filters",
+        "description": "Current filters:\n{current_filters}\n\nChoose an action:",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_filter": {
+        "title": "Add New Filter",
+        "description": "Add a new Jira filter to monitor.\n\nIf you don't provide a filter name, the system will automatically use the name from Jira.\n\n{test_result}",
+        "data": {
+          "filter_id": "Filter ID",
+          "filter_name": "Filter Name (optional - will use Jira name if empty)"
+        }
+      },
+      "edit_filter": {
+        "title": "Edit Filter",
+        "description": "Select a filter to edit.",
+        "data": {
+          "filter_to_edit": "Filter to Edit"
+        }
+      },
+      "edit_filter_details": {
+        "title": "Edit Filter Details",
+        "description": "Update the filter information.\n\nIf you don't provide a filter name, the system will automatically use the name from Jira.\n\n{test_result}",
+        "data": {
+          "filter_id": "Filter ID",
+          "filter_name": "Filter Name (optional - will use Jira name if empty)"
+        }
+      },
+      "remove_filter": {
+        "title": "Remove Filter",
+        "description": "Select a filter to remove.",
+        "data": {
+          "filter_to_remove": "Filter to Remove"
+        }
+      }
     }
   }
 }
