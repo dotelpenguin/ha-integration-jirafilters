@@ -1,0 +1,8 @@
+refresh:
+  name: Refresh
+  description: Manually refresh Jira Filters data
+  fields: {}
+
+# Note: Services are registered dynamically with names following the pattern:
+# jira_filters.refresh_{connection_name} where connection_name comes from 
+# the integration configuration entry name.

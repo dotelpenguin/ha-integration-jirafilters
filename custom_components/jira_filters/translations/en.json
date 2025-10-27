@@ -54,5 +54,11 @@
         "name": "Jira Filter"
       }
     }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh",
+      "description": "Manually refresh Jira Filters data for this connection"
+    }
   }
 }
