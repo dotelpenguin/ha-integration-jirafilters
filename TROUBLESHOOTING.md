@@ -49,8 +49,6 @@ Look for specific error messages in the Home Assistant logs:
 - **Settings** > **System** > **Logs**
 
 Common error patterns:
-- `'ConfigEntries' object has no attribute 'async_forward_entry_setup'` - Cache issue, restart HA
-- `requests library is not available` - Dependencies not installed
 - `Error communicating with Jira API` - Check your Jira credentials
 
 ### 6. Reinstall Integration
@@ -62,14 +60,6 @@ If all else fails:
 3. **Restart Home Assistant**
 4. **Reinstall via HACS** or manual installation
 5. **Reconfigure the integration**
-
-### 7. Dependencies
-
-Make sure these Python packages are available:
-- `requests>=2.25.0`
-- `certifi>=2021.5.25`
-
-These should be automatically installed by Home Assistant, but if you're having issues, you can install them manually in your Home Assistant environment.
 
 ## Still Having Issues?
 

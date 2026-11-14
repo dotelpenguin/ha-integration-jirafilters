@@ -1,365 +1,158 @@
-# Jira Filters Home Assistant Integration
+# Jira Filters for Home Assistant
 
-A Home Assistant integration that connects to Jira Cloud instances to monitor filter results and display issue counts and details as sensors.
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz)
+[![GitHub Release](https://img.shields.io/github/v/release/dotelpenguin/ha-integration-jirafilters)](https://github.com/dotelpenguin/ha-integration-jirafilters/releases)
+[![HACS Validation](https://github.com/dotelpenguin/ha-integration-jirafilters/actions/workflows/hacs.yml/badge.svg)](https://github.com/dotelpenguin/ha-integration-jirafilters/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/dotelpenguin/ha-integration-jirafilters/actions/workflows/hassfest.yml/badge.svg)](https://github.com/dotelpenguin/ha-integration-jirafilters/actions/workflows/hassfest.yml)
+[![License: MIT](https://img.shields.io/github/license/dotelpenguin/ha-integration-jirafilters)](LICENSE)
 
+Turn your saved **Jira Cloud filters** into Home Assistant sensors. Each sensor shows how many issues match the filter, with the top issues, their status, priority and assignee available as attributes — ready for dashboards, notifications and automations.
 
-
-## Developer Note
-
-- This is my first Home Assistant integration. I have relied heavily on AI for the integration workflows and Home Assistant components. Feel free to make suggestions, merge requests, or fork this.
+<!-- Screenshot: add an image of a sensor / dashboard card here, e.g. ![Jira Filters dashboard](docs/images/dashboard.png) -->
 
 ## Features
 
-- Connect to Jira Cloud using V3 API
-- Monitor multiple Jira filters simultaneously
-- Real-time issue counts and details
-- Configurable refresh intervals (minimum 5 minutes)
-- Detailed issue information including status, priority, assignee, and timestamps
-- Most recent ticket tracking with human-readable timestamps
-- **NEW**: Multiple Jira instance support with custom connection names
-- **NEW**: Automatic filter name detection from Jira
-- **NEW**: Manual refresh services for each connection
-- **NEW**: Enhanced error handling and validation
-- **NEW**: Post-setup configuration management
+- One sensor per saved Jira filter, with the true total issue count
+- Multiple filters per connection, and multiple Jira sites or accounts
+- Filter names fetched from Jira automatically (or set your own)
+- Top 10 issues and the most recently updated ticket as attributes
+- Add, edit and remove filters from the UI — no restart needed
+- Manual refresh action per connection
 
 ## Installation
 
-### Via HACS (Recommended)
+### HACS (recommended)
 
-1. Add this repository to HACS as a custom repository
-2. Install "Jira Filters" from HACS
-3. Restart Home Assistant
-4. Add the integration via the UI
+Jira Filters is in the HACS default store.
 
-### Manual Installation
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dotelpenguin&repository=ha-integration-jirafilters&category=integration)
 
-1. Copy the `custom_components/jira_filters` folder to your Home Assistant `custom_components` directory
-2. Restart Home Assistant
-3. Add the integration via the UI
+1. Click the button above, or search HACS for **Jira Filters**.
+2. Click **Download**, then restart Home Assistant.
 
-## Configuration
+### Manual
 
-### Initial Setup
+Copy `custom_components/jira_filters` into your Home Assistant `config/custom_components/` folder and restart. See [MANUAL_INSTALL.md](MANUAL_INSTALL.md) for details.
 
-1. Go to **Settings** > **Devices & Services**
-2. Click **Add Integration**
-3. Search for "Jira Filters"
-4. Enter your Jira connection details:
-   - **Base URL**: Your Jira Cloud URL (e.g., `https://your-domain.atlassian.net`)
-   - **Email**: Your Jira email address
-   - **API Token**: Your Jira API token (not your password)
-   - **Connection Name**: Optional name for this Jira instance (e.g., "Production", "Dev"). If not provided, will use the URL basename (e.g., "your-domain" from the URL)
-   - **Max Results**: Maximum number of issues to fetch per filter (default: 100)
-   - **Refresh Interval**: How often to update data in minutes (minimum: 5)
+## Setup
 
-### Adding Filters
+[![Open your Home Assistant instance and start setting up Jira Filters.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=jira_filters)
 
-After the initial setup, you can add Jira filters to monitor:
+Or go to **Settings → Devices & services → Add integration → Jira Filters**.
 
-1. **Filter ID**: The numeric ID of your Jira filter
-2. **Filter Name**: Optional display name for the filter. If not provided, the system will automatically use the filter name from Jira
+### 1. Connection
 
-You can add multiple filters during setup or add more later through the integration options.
+| Field | Description |
+| --- | --- |
+| **Jira Base URL** | Your Jira Cloud URL, e.g. `https://your-domain.atlassian.net` |
+| **Email Address** | The email of your Atlassian account |
+| **API Token** | An Atlassian API token — [create one here](https://id.atlassian.com/manage-profile/security/api-tokens) |
+| **Connection Name** | Optional. Defaults to the first part of the URL (`your-domain`) |
+| **Max Results** | Issues fetched per filter for the attributes (default 100) |
+| **Refresh Interval** | Minutes between updates (default 5) |
 
-### Post-Setup Configuration
+### 2. Filters
 
-After the initial setup, you can manage your Jira Filters integration through the integration options:
+Enter the **Filter ID** of a saved filter. You'll find it in the filter's URL:
+`https://your-domain.atlassian.net/issues/?filter=12345` → `12345`.
 
-1. Go to **Settings** > **Devices & Services**
-2. Find your "Jira Filters - {connection_name}" integration
-3. Click **Configure** to access the options menu
-4. Available options:
-   - **Edit Server Settings**: Update connection details, credentials, and refresh settings
-   - **Manage Filters**: Add, edit, or remove filters
-   - **Add Filter**: Add new filters to monitor
-   - **Edit Filter**: Modify existing filter details
-   - **Remove Filter**: Delete filters you no longer need
+Leave **Filter Name** empty to use the name from Jira. Add as many filters as you like.
 
-All changes take effect immediately without requiring a Home Assistant restart.
+### Changing settings later
 
-### Multiple Jira Instances
+Go to **Settings → Devices & services → Jira Filters → Configure** to edit the connection or to add, edit and remove filters. Changes apply immediately.
 
-You can monitor multiple Jira instances by creating separate integration instances:
+To monitor another Jira site or account, add the integration again. Each site + email combination can be added once.
 
-1. Each integration instance connects to one Jira Cloud instance
-2. Each instance gets a unique name (e.g., "Jira Filters - Production", "Jira Filters - Dev")
-3. Each instance has its own sensors and services
-4. Services are named per instance (e.g., `jira_filters.refresh_production`, `jira_filters.refresh_dev`)
+## Sensors
 
-### Optimizing Filter Results
+Each filter creates a sensor, e.g. `sensor.jira_filter_my_open_issues`.
 
-Since the integration only shows the first 10 issues in the sensor attributes, it's important to configure your Jira filters to return the most relevant results first:
+**State:** total number of issues matching the filter.
 
-#### Filter Configuration Best Practices
+| Attribute | Description |
+| --- | --- |
+| `filter_id` / `filter_name` | The Jira filter |
+| `jql` | The filter's JQL query |
+| `total_count` | Total issues matching the filter |
+| `issues` | The first 10 issues: `key`, `summary`, `status`, `priority`, `assignee`, `created`, `updated` |
+| `more_issues_available` | `true` when there are more issues than shown in `issues` |
+| `most_recent_ticket` | The most recently updated issue: `key`, `summary`, `updated`, `updated_human` |
+| `last_updated` | When the data was last refreshed |
 
-1. **Sort by Relevance**: Configure your Jira filter to sort by the most important criteria:
-   - **Priority**: Sort by priority (High to Low) to see critical issues first
-   - **Last Updated**: Sort by "Updated" (Newest first) to see recently modified issues
-   - **Created Date**: Sort by "Created" (Newest first) to see new issues
-   - **Due Date**: Sort by "Due Date" (Earliest first) to see overdue issues
+> **Tip:** `issues` holds the first 10 results in the filter's own sort order. Sort your filter in Jira (by priority, updated or due date) so the issues that matter most come first.
 
-2. **Use Specific Criteria**: Make your filters as specific as possible:
-   - **Status**: Include specific statuses (e.g., "In Progress", "To Do", "Blocked")
-   - **Assignee**: Filter by specific users or teams
-   - **Project**: Focus on specific projects
-   - **Labels**: Use relevant labels to narrow results
+## Actions
 
-3. **Example Filter Configurations**:
-   ```
-   High Priority Issues:
-   - Status: "In Progress", "To Do", "Blocked"
-   - Priority: "High", "Highest"
-   - Sort: Priority (High to Low), then Updated (Newest first)
-   
-   Recently Updated Issues:
-   - Updated: "Last 7 days"
-   - Sort: Updated (Newest first)
-   
-   Overdue Issues:
-   - Due Date: "Overdue"
-   - Sort: Due Date (Earliest first)
-   ```
+Each connection gets a refresh action named after the connection, for example `jira_filters.refresh_production` for a connection named "Production".
 
-4. **Test Your Filters**: Before adding to Home Assistant:
-   - Test the filter in Jira to ensure it returns relevant results
-   - Check that the first 10 results are the most important ones
-   - Adjust sorting and criteria as needed
-
-#### Why This Matters
-
-- The `more_issues_available` attribute will show `true` if there are more than 10 issues
-- Only the first 10 issues appear in the `issues` attribute
-- The `most_recent_ticket` shows the most recently updated issue from the results
-- Proper sorting ensures the most critical/recent issues are visible in Home Assistant
-
-### Getting Your Jira API Token
-
-1. Go to [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
-2. Click **Create API token**
-3. Give it a label (e.g., "Home Assistant")
-4. Copy the generated token
-
-### Finding Filter IDs
-
-1. In Jira, go to **Issues** > **Search for issues**
-2. Create or select a saved filter
-3. The Filter ID is in the URL: `https://your-domain.atlassian.net/issues/?filter=12345`
-
-## Entities
-
-For each configured filter, the integration creates a sensor entity with:
-
-- **State**: Total count of issues in the filter
-- **Attributes**:
-  - `filter_id`: The Jira filter ID
-  - `filter_name`: Display name of the filter
-  - `jql`: The JQL query used by the filter
-  - `total_count`: Number of issues returned
-  - `more_issues_available`: Boolean indicating if there are more than 10 issues (more than shown in attributes)
-  - `issues`: Array of issue details (limited to first 10)
-  - `most_recent_ticket`: Details of the most recently updated ticket
-  - `last_updated`: When the data was last refreshed
-
-### Issue Details
-
-Each issue in the `issues` attribute includes:
-- `key`: Issue key (e.g., "PROJ-123")
-- `summary`: Issue summary/title
-- `status`: Current status name
-- `priority`: Priority level
-- `assignee`: Assignee display name
-- `updated`: Last update timestamp
-- `created`: Creation timestamp
-
-## Services
-
-Each Jira Filters integration instance provides a manual refresh service:
-
-- **Service Name**: `jira_filters.refresh_{connection_name}`
-- **Description**: Manually refresh all filters for this Jira instance
-- **Parameters**: None required
-
-### Service Examples
-
-**For a connection named "Production":**
 ```yaml
-service: jira_filters.refresh_production
+action: jira_filters.refresh_production
 ```
 
-**For a connection named "Dev":**
-```yaml
-service: jira_filters.refresh_dev
-```
+## Examples
 
-**For a connection with URL basename "mycompany":**
-```yaml
-service: jira_filters.refresh_mycompany
-```
-
-### Service Usage in Automations
+**Notify when high-priority issues appear**
 
 ```yaml
 automation:
-  - alias: "Refresh Jira Data Daily"
-    trigger:
-      platform: time
-      at: "09:00:00"
-    action:
-      - service: jira_filters.refresh_production
+  - alias: "Jira: high priority issues"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.jira_filter_high_priority
+        above: 0
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: "{{ states('sensor.jira_filter_high_priority') }} high priority Jira issues"
 ```
 
-## Usage Examples
-
-### Automation Example
-
-```yaml
-automation:
-  - alias: "High Priority Issues Alert"
-    trigger:
-      platform: numeric_state
-      entity_id: sensor.jira_filter_high_priority
-      above: 0
-    action:
-      service: notify.mobile_app_your_phone
-      data:
-        message: "You have {{ states('sensor.jira_filter_high_priority') }} high priority issues!"
-```
-
-### Template Example
+**Show the most recent ticket**
 
 ```yaml
 template:
   - sensor:
-      - name: "Most Recent Jira Issue"
+      - name: "Latest Jira ticket"
         state: >
-          {{ state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket').key if state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket') else 'None' }}
-        attributes:
-          summary: >
-            {{ state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket').summary if state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket') else 'None' }}
-          updated: >
-            {{ state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket').updated_human if state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket') else 'None' }}
+          {{ (state_attr('sensor.jira_filter_my_filter', 'most_recent_ticket') or {}).get('key', 'none') }}
 ```
 
 ## Troubleshooting
 
-### Connection Issues
+- **Cannot connect / authentication failed** — check the URL, that the email matches your Atlassian account, and that the API token hasn't expired.
+- **Filter not found** — check the Filter ID and that your account can view the filter.
+- **Search errors** — Jira's search API rejects queries with no conditions (for example only `ORDER BY created`). Add at least one condition such as `project = ABC`.
 
-- Verify your Jira URL is correct and accessible
-- Check that your API token is valid and not expired
-- Ensure your email address matches your Jira account
+For more detail, enable debug logging:
 
-### Filter Issues
+```yaml
+logger:
+  logs:
+    custom_components.jira_filters: debug
+```
 
-- Verify the Filter ID is correct
-- Ensure you have permission to access the filter
-- Check that the filter is not empty
-
-### Performance
-
-- Large filters with many issues may take longer to load
-- Consider reducing `max_results` if you experience timeouts
-- Increase `refresh_minutes` to reduce API calls
-
-## Known Issues
-
-### Current Limitations
-
-1. **API Rate Limiting**: Jira Cloud has rate limits that may cause temporary failures during high usage; recommend refresh of 5 minutes or longer
-2. **Large Filter Performance**: Filters with thousands of issues may cause timeouts or slow responses
-3. **Authentication Token Expiry**: API tokens may expire and need to be regenerated periodically
-4. **Network Connectivity**: Requires stable internet connection to Jira Cloud
-5. **Filter Permissions**: Users must have appropriate permissions to access configured filters
-6. **Non-standard Jira projects**: Integration assumes you are using a fairly standard project configuration
-
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more.
 
 ## FAQ
 
-### General Questions
+**Does this work with Jira Server / Data Center?**
+No. It supports Jira Cloud only (REST API v3).
 
-**Q: Can I use this with Jira Server (on-premises) instead of Jira Cloud?**
-A: No, this integration is specifically designed for Jira Cloud using the v3 REST API. Jira Server uses different authentication methods and API endpoints. The v2 API is EOL, and I do not have access to any on‑premises installations for testing.
+**Why saved filters instead of raw JQL?**
+Jira validates and manages filters, so you can change a query in Jira without touching Home Assistant.
 
-**Q: How many filters can I monitor?**
-A: There's no hard limit, but performance may degrade with many filters. We recommend monitoring 10-20 filters maximum for optimal performance.
+**How many filters can I add?**
+There's no hard limit. Each filter costs a few API calls per refresh, so keep the interval at 5 minutes or more if you have many.
 
-**Q: Can I monitor filters from different Jira instances?**
-A: Yes! Each integration instance connects to one Jira Cloud instance. Create a new integration instance for each Jira instance you wish to monitor. Each instance will have a unique name like "Jira Filters - Production" and "Jira Filters - Dev".
+**Why are only 10 issues in the attributes?**
+To keep Home Assistant's state and database small. The sensor state and `total_count` always show the full count.
 
-**Q: What happens if my Jira instance is down?**
-A: The sensors will show "unavailable" state and log errors. They will automatically recover when Jira is back online.
+## Contributing
 
-**Q: Why use a Jira Filter and not JQL?**
-A: JQL requires significantly more parsing, validation, and error handling. Filters are managed and validated by Jira’s API, simplifying the integration while remaining flexible.
+Issues and pull requests are welcome — please use the [issue tracker](https://github.com/dotelpenguin/ha-integration-jirafilters/issues).
 
-### Configuration Questions
-
-**Q: What's the minimum refresh interval and why?**
-A: The minimum is 5 minutes to respect Jira's API rate limits and prevent excessive API calls.
-
-
-**Q: What's the maximum number of issues I can fetch per filter?**
-A: The default is 100, but you can increase this. However, very large numbers may cause timeouts or performance issues.
-
-**Q: Do I need to restart Home Assistant after adding new filters?**
-A: No, you can add new filters through the integration configuration without restarting.
-
-### New Features Questions
-
-**Q: What is the connection name used for?**
-A: The connection name helps you identify different Jira instances in Home Assistant. It appears in the integration title (e.g., "Jira Filters - Production") and in service names (e.g., `jira_filters.refresh_production`).
-
-**Q: Do I have to provide a connection name?**
-A: No, it's optional. If you don't provide one, the system will automatically extract the basename from your Jira URL (e.g., "mycompany" from "https://mycompany.atlassian.net").
-
-**Q: Do I have to provide filter names?**
-A: No, filter names are optional. If you don't provide one, the system will automatically fetch the filter name from Jira.
-
-**Q: How do I manually refresh my Jira data?**
-A: Each integration instance provides a refresh service. For a connection named "Production", use `jira_filters.refresh_production`. You can call this service from automations, scripts, or the Developer Tools.
-
-**Q: Can I edit my integration settings after setup?**
-A: Yes! Go to Settings > Devices & Services, find your integration, and click Configure. You can edit server settings, add/remove filters, and modify existing filters without restarting Home Assistant.
-
-**Q: Why are only the first 10 issues shown in the attributes?**
-A: To keep the sensor attributes manageable and prevent performance issues. The `more_issues_available` attribute indicates if there are additional issues. Configure your Jira filters with proper sorting to ensure the most relevant issues appear first.
-
-**Q: How can I make sure I see the most important issues?**
-A: Configure your Jira filters to sort by priority, due date, or last updated. This ensures the most critical or recent issues appear in the first 10 results that are shown in Home Assistant.
-
-### Troubleshooting Questions
-
-**Q: My sensor shows "unknown" state - what should I do?**
-A: Check the Home Assistant logs for error messages. Common causes include invalid credentials, network issues, or incorrect filter IDs.
-
-**Q: I'm getting authentication errors - what's wrong?**
-A: Verify your email address and API token are correct. Make sure the API token hasn't expired and has the necessary permissions.
-
-**Q: The integration worked before but stopped working - what changed?**
-A: Your API token may have expired, or there may be network connectivity issues. Check the logs and verify your credentials.
-
-**Q: Can I see more detailed error information?**
-A: Yes, enable debug logging in Home Assistant for the `custom_components.jira_filters` logger to see detailed error messages.
-
-**Q: Why are some issue details missing or showing as "None"?**
-A: This depends on your Jira project configuration. Some fields may not be enabled or may not have values for certain issues.
-
-### Performance Questions
-
-**Q: The integration is slow - how can I improve performance?**
-A: Reduce the number of filters, decrease `max_results`, or increase the refresh interval. Also ensure you have a stable internet connection.
-
-**Q: Will this integration impact my Jira instance performance?**
-A: The integration makes minimal API calls and respects rate limits, so it should have negligible impact on your Jira instance.
-
-**Q: Can I run multiple instances of this integration?**
-A: Yes, but each instance will make separate API calls, so consider the total impact on your Jira instance.
-
-
-### Requirements
-
-- `requests>=2.25.0`
-- `certifi>=2021.5.25`
+This is my first Home Assistant integration, and I've used AI tools to help build it. Suggestions, merge requests and forks are all welcome.
 
 ## License
 
-This project is licensed under the MIT License.
+[MIT](LICENSE)
