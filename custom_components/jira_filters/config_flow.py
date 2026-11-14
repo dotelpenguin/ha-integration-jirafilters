@@ -19,7 +19,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN
+from .const import DOMAIN, make_entry_unique_id
 
 def _extract_basename_from_url(url: str) -> str:
     """Extract basename from URL for default connection name."""
@@ -156,7 +156,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Set default name if not provided
             if not user_input.get("name"):
                 user_input["name"] = _extract_basename_from_url(user_input["base_url"])
-            
+
+            # Prevent adding the same Jira site + account twice
+            await self.async_set_unique_id(
+                make_entry_unique_id(user_input["base_url"], user_input["email"])
+            )
+            self._abort_if_unique_id_configured()
+
             self._data = user_input
             return await self.async_step_filter()
 
@@ -171,6 +177,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(
                 step_id="filter", data_schema=STEP_FILTER_DATA_SCHEMA
+            )
+
+        # Reject a filter that is already configured
+        if any(f["filter_id"] == user_input["filter_id"] for f in self._filters):
+            return self.async_show_form(
+                step_id="filter",
+                data_schema=STEP_FILTER_DATA_SCHEMA,
+                errors={"base": "duplicate_filter"}
             )
 
         # Validate filter exists and get filter name
@@ -311,11 +325,22 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self._data.update(user_input)
             
             # Update the config entry
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=self._data
+            new_unique_id = make_entry_unique_id(self._data["base_url"], self._data["email"])
+            taken = any(
+                e.unique_id == new_unique_id
+                for e in self.hass.config_entries.async_entries(DOMAIN)
+                if e.entry_id != self.config_entry.entry_id
             )
-            
+            if taken:
+                errors["base"] = "already_configured"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data=self._data,
+                    unique_id=new_unique_id,
+                )
+
+        if not errors:
             # Reload the integration to apply changes
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             
@@ -326,6 +351,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             vol.Required("base_url", default=self._data.get("base_url", "")): str,
             vol.Required("email", default=self._data.get("email", "")): str,
             vol.Required("api_token", default=self._data.get("api_token", "")): str,
+            vol.Optional("name", default=self._data.get("name", "")): str,
             vol.Optional("max_results", default=self._data.get("max_results", 100)): int,
             vol.Optional("refresh_minutes", default=self._data.get("refresh_minutes", 5)): int,
         })
@@ -380,6 +406,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_show_form(
                 step_id="add_filter",
                 data_schema=STEP_OPTIONS_FILTER_SCHEMA
+            )
+
+        # Reject a filter that is already configured
+        if any(f["filter_id"] == user_input["filter_id"] for f in self._filters):
+            return self.async_show_form(
+                step_id="add_filter",
+                data_schema=STEP_OPTIONS_FILTER_SCHEMA,
+                errors={"base": "duplicate_filter"}
             )
 
         # Validate filter exists and get filter name
@@ -648,99 +682,6 @@ def _validate_filter(base_url: str, email: str, api_token: str, filter_id: str) 
 
     except requests.exceptions.RequestException:
         return False, ""
-
-
-def _test_filter_count(base_url: str, email: str, api_token: str, filter_id: str, max_results: int = 100) -> dict[str, Any]:
-    """Test a filter and return the count and basic info."""
-    try:
-        session = requests.Session()
-        session.auth = (email, api_token)
-        session.headers.update({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        })
-
-        # Get filter details
-        filter_response = session.get(
-            f"{base_url}/rest/api/3/filter/{filter_id}",
-            timeout=30,
-            verify=True
-        )
-        filter_response.raise_for_status()
-        filter_data = filter_response.json()
-        
-        jql = filter_data.get("jql", "")
-        filter_name = filter_data.get("name", f"Filter {filter_id}")
-        
-        # Search for issues using the filter's JQL
-        search_payload = {
-            'jql': jql,
-            'maxResults': max_results,
-            'fields': ['summary', 'status', 'assignee', 'priority', 'issuetype', 'updated', 'created'],
-        }
-
-        # Try the new JQL endpoint first
-        try:
-            jql_response = session.post(
-                f"{base_url}/rest/api/3/search/jql",
-                json=search_payload,
-                timeout=30,
-                verify=True,
-            )
-            jql_response.raise_for_status()
-            search_response = jql_response
-        except requests.exceptions.HTTPError:
-            # Fall back to legacy endpoints
-            try:
-                post_response = session.post(
-                    f"{base_url}/rest/api/3/search",
-                    json=search_payload,
-                    timeout=30,
-                    verify=True,
-                )
-                post_response.raise_for_status()
-                search_response = post_response
-            except requests.exceptions.HTTPError:
-                get_response = session.get(
-                    f"{base_url}/rest/api/3/search",
-                    params={
-                        'jql': jql,
-                        'maxResults': max_results,
-                        'fields': 'summary,status,assignee,priority,issuetype,updated,created',
-                    },
-                    timeout=30,
-                    verify=True,
-                )
-                get_response.raise_for_status()
-                search_response = get_response
-        
-        search_data = search_response.json()
-        issues = search_data.get("issues", [])
-        
-        return {
-            "success": True,
-            "filter_name": filter_name,
-            "jql": jql,
-            "total_count": len(issues),
-            "max_results": max_results,
-            "sample_issues": [
-                {
-                    "key": issue.get("key"),
-                    "summary": issue.get("fields", {}).get("summary", ""),
-                    "status": issue.get("fields", {}).get("status", {}).get("name", ""),
-                }
-                for issue in issues[:5]  # Show first 5 issues as sample
-            ]
-        }
-
-    except requests.exceptions.RequestException as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "filter_name": f"Filter {filter_id}",
-            "jql": "",
-            "total_count": 0
-        }
 
 
 class CannotConnect(HomeAssistantError):

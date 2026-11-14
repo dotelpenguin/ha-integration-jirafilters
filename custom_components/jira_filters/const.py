@@ -1,6 +1,17 @@
 """Constants for the Jira Filters integration."""
 
+from urllib.parse import urlparse
+
 DOMAIN = "jira_filters"
+
+# Unique ID prefix used before v1.2.0 (not scoped to a config entry)
+LEGACY_UNIQUE_ID_PREFIX = "jira_filter_"
+
+
+def make_entry_unique_id(base_url: str, email: str) -> str:
+    """Build a config entry unique ID from the Jira host and account email."""
+    host = (urlparse(base_url.strip()).hostname or base_url.strip()).lower()
+    return f"{host}::{email.strip().lower()}"
 
 # Configuration keys
 CONF_BASE_URL = "base_url"

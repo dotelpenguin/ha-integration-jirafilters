@@ -58,6 +58,7 @@ async def async_setup_entry(
             entities.append(
                 JiraFilterSensor(
                     coordinator,
+                    config_entry.entry_id,
                     filter_config["filter_id"],
                     filter_config["filter_name"]
                 )
@@ -182,55 +183,23 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                     ],
                 }
 
-                # Prefer new Jira endpoint first to avoid 410 warnings
-                try:
-                    _LOGGER.debug("Using POST /rest/api/3/search/jql for filter %s", filter_id)
-                    jql_response = session.post(
-                        f"{self.base_url}/rest/api/3/search/jql",
-                        json=search_payload,
-                        timeout=30,
-                        verify=True,
-                    )
-                    jql_response.raise_for_status()
-                    search_response = jql_response
-                except requests.exceptions.HTTPError:
-                    jql_status = getattr(jql_response, 'status_code', None)
-                    # Fall back to legacy POST, then legacy GET only if needed
-                    _LOGGER.debug(
-                        "POST /rest/api/3/search/jql failed with status %s for filter %s; trying legacy endpoints",
-                        jql_status,
-                        filter_id,
-                    )
-                    try:
-                        post_response = session.post(
-                            f"{self.base_url}/rest/api/3/search",
-                            json=search_payload,
-                            timeout=30,
-                            verify=True,
-                        )
-                        post_response.raise_for_status()
-                        search_response = post_response
-                    except requests.exceptions.HTTPError:
-                        _LOGGER.debug(
-                            "POST /rest/api/3/search failed; trying GET /rest/api/3/search for filter %s",
-                            filter_id,
-                        )
-                        get_response = session.get(
-                            f"{self.base_url}/rest/api/3/search",
-                            params={
-                                'jql': jql,
-                                'maxResults': self.max_results,
-                                'fields': 'summary,status,assignee,priority,issuetype,updated,created,parent,labels,project,components,issuelinks',
-                            },
-                            timeout=30,
-                            verify=True,
-                        )
-                        get_response.raise_for_status()
-                        search_response = get_response
+                # Fetch the issue details (up to max_results)
+                search_response = session.post(
+                    f"{self.base_url}/rest/api/3/search/jql",
+                    json=search_payload,
+                    timeout=30,
+                    verify=True,
+                )
+                search_response.raise_for_status()
                 search_data = search_response.json()
-                
+
                 issues = search_data.get("issues", [])
                 simplified_issues = [self._simplify_issue(issue) for issue in issues]
+
+                # /search/jql has no "total"; ask Jira for the full match count
+                total_count = self._fetch_approximate_count(session, jql, filter_id)
+                if total_count is None:
+                    total_count = len(simplified_issues)
                 
                 # Find most recent ticket
                 most_recent_ticket = None
@@ -248,7 +217,8 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                     'filter_id': filter_id,
                     'filter_name': filter_name,
                     'jql': jql,
-                    'total_count': len(simplified_issues),
+                    'total_count': total_count,
+                    'returned_count': len(simplified_issues),
                     'issues': simplified_issues,
                     'most_recent_ticket': most_recent_ticket,
                     'last_updated': datetime.now(timezone.utc).isoformat()
@@ -268,6 +238,28 @@ class JiraFiltersCoordinator(DataUpdateCoordinator):
                 }
 
         return results
+
+    def _fetch_approximate_count(
+        self, session: requests.Session, jql: str, filter_id: str
+    ) -> int | None:
+        """Return the total number of issues matching the JQL, or None on failure."""
+        try:
+            response = session.post(
+                f"{self.base_url}/rest/api/3/search/approximate-count",
+                json={"jql": jql},
+                timeout=30,
+                verify=True,
+            )
+            response.raise_for_status()
+            count = response.json().get("count")
+            return int(count) if count is not None else None
+        except (requests.exceptions.RequestException, ValueError, TypeError) as err:
+            _LOGGER.debug(
+                "approximate-count failed for filter %s, falling back to returned issue count: %s",
+                filter_id,
+                err,
+            )
+            return None
 
     def _simplify_issue(self, issue: dict[str, Any]) -> dict[str, Any]:
         """Simplify Jira issue data for Home Assistant."""
@@ -339,6 +331,7 @@ class JiraFilterSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         coordinator: JiraFiltersCoordinator,
+        entry_id: str,
         filter_id: str,
         filter_name: str,
     ) -> None:
@@ -347,7 +340,8 @@ class JiraFilterSensor(CoordinatorEntity, SensorEntity):
         self._filter_id = filter_id
         self._filter_name = filter_name
         self._attr_name = f"Jira Filter {filter_name}"
-        self._attr_unique_id = f"jira_filter_{filter_id}"
+        # Scoped to the config entry so the same filter ID on two Jira sites doesn't clash
+        self._attr_unique_id = f"{entry_id}_{filter_id}"
 
     @property
     def native_value(self) -> int:
@@ -371,7 +365,7 @@ class JiraFilterSensor(CoordinatorEntity, SensorEntity):
             ATTR_FILTER_NAME: filter_data.get('filter_name'),
             ATTR_JQL: filter_data.get('jql'),
             ATTR_TOTAL_COUNT: filter_data.get('total_count', 0),
-            ATTR_MORE_ISSUES_AVAILABLE: filter_data.get('total_count', 0) > 10,
+            ATTR_MORE_ISSUES_AVAILABLE: filter_data.get('total_count', 0) > min(10, len(filter_data.get('issues', []))),
             ATTR_LAST_UPDATED: filter_data.get('last_updated'),
         }
 

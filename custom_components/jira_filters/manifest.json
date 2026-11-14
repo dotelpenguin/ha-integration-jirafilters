@@ -1,7 +1,9 @@
 {
   "domain": "jira_filters",
   "name": "Jira Filters",
-  "codeowners": ["@dotelpenguin"],
+  "codeowners": [
+    "@dotelpenguin"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/dotelpenguin/ha-integration-jirafilters",
@@ -9,5 +11,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/dotelpenguin/ha-integration-jirafilters/issues",
   "requirements": [],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }
