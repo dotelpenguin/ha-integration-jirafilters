@@ -74,52 +74,40 @@ STEP_OPTIONS_FILTER_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
-    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
+    Raises InvalidAuth for rejected credentials and CannotConnect for anything else.
     """
     base_url = data["base_url"].rstrip("/")
-    email = data["email"]
-    api_token = data["api_token"]
+    display_name = await hass.async_add_executor_job(
+        _test_jira_connection, base_url, data["email"], data["api_token"]
+    )
+    return {"title": f"Jira ({base_url})", "display_name": display_name}
 
-    # Test connection to Jira API
+
+def _test_jira_connection(base_url: str, email: str, api_token: str) -> str:
+    """Call /myself and return the account's display name."""
     try:
-        response = await hass.async_add_executor_job(
-            _test_jira_connection, base_url, email, api_token
+        response = requests.get(
+            f"{base_url}/rest/api/3/myself",
+            auth=(email, api_token),
+            headers={"Accept": "application/json"},
+            timeout=30,
         )
-        if not response:
-            raise CannotConnect
-
-        return {"title": f"Jira ({base_url})"}
-
     except requests.exceptions.RequestException as err:
-        _LOGGER.error("Error connecting to Jira: %s", err)
+        _LOGGER.error("Failed to connect to Jira at %s: %s", base_url, err)
         raise CannotConnect from err
 
-
-def _test_jira_connection(base_url: str, email: str, api_token: str) -> bool:
-    """Test connection to Jira API."""
+    if response.status_code in (401, 403):
+        _LOGGER.warning("Jira rejected the credentials for %s (HTTP %s)", email, response.status_code)
+        raise InvalidAuth
     try:
-        session = requests.Session()
-        session.auth = (email, api_token)
-        session.headers.update({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        })
-
-        # Test with a simple API call to get current user
-        response = session.get(
-            f"{base_url}/rest/api/3/myself",
-            timeout=30,
-            verify=True
-        )
         response.raise_for_status()
-        
         user_data = response.json()
-        _LOGGER.info("Successfully connected to Jira as: %s", user_data.get('displayName', email))
-        return True
+    except (requests.exceptions.RequestException, ValueError) as err:
+        _LOGGER.error("Unexpected response from Jira at %s: %s", base_url, err)
+        raise CannotConnect from err
 
-    except requests.exceptions.RequestException as err:
-        _LOGGER.error("Failed to connect to Jira: %s", err)
-        return False
+    _LOGGER.debug("Connected to Jira as %s", user_data.get("displayName", email))
+    return user_data.get("displayName", email)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -144,7 +132,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         try:
-            info = await validate_input(self.hass, user_input)
+            await validate_input(self.hass, user_input)
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
@@ -308,7 +296,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         try:
             # Test the new connection settings
-            info = await validate_input(self.hass, user_input)
+            await validate_input(self.hass, user_input)
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:

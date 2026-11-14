@@ -2,23 +2,34 @@
 from __future__ import annotations
 
 import logging
+
 import voluptuous as vol
-import homeassistant.helpers.config_validation as cv
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.util import slugify
 
-from .const import DOMAIN, LEGACY_UNIQUE_ID_PREFIX, make_entry_unique_id
+from .const import DOMAIN, LEGACY_UNIQUE_ID_PREFIX, SERVICE_REFRESH, make_entry_unique_id
+from .coordinator import JiraFiltersCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 # This integration is config-entry only
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+PLATFORMS = [Platform.SENSOR]
+
+REFRESH_SCHEMA = vol.Schema({vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string})
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the Jira Filters component."""
+    """Register the integration-wide refresh action."""
+    hass.services.async_register(
+        DOMAIN, SERVICE_REFRESH, _async_handle_refresh, schema=REFRESH_SCHEMA
+    )
     return True
 
 
@@ -71,73 +82,70 @@ def _async_backfill_entry_unique_id(hass: HomeAssistant, entry: ConfigEntry) -> 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Jira Filters from a config entry."""
-    try:
-        _async_backfill_entry_unique_id(hass, entry)
-        await _async_migrate_unique_ids(hass, entry)
+    _async_backfill_entry_unique_id(hass, entry)
+    await _async_migrate_unique_ids(hass, entry)
 
-        hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN][entry.entry_id] = {
-            "data": entry.data,
-            "coordinator": None
-        }
+    coordinator = JiraFiltersCoordinator(hass, entry)
+    # Raises ConfigEntryNotReady if Jira can't be reached, so Home Assistant retries setup
+    await coordinator.async_config_entry_first_refresh()
 
-        # Forward the setup to the sensor platform.
-        try:
-            # Try newer API first
-            await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
-        except AttributeError:
-            # Fallback to older API
-            await hass.config_entries.async_forward_entry_setup(entry, "sensor")
-        
-        # Register services with connection name
-        connection_name = entry.data.get("name", "Jira")
-        service_name = f"refresh_{connection_name.lower().replace(' ', '_')}"
-        
-        async def handle_refresh_service(call: ServiceCall) -> None:
-            """Handle refresh service call."""
-            coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
-            if coordinator:
-                await coordinator.async_request_refresh()
-                _LOGGER.info("Manually refreshed Jira Filters data for %s", connection_name)
-            else:
-                _LOGGER.warning("No coordinator available for %s", connection_name)
-        
-        # Register the service
-        hass.services.async_register(
-            DOMAIN,
-            service_name,
-            handle_refresh_service,
-            schema=vol.Schema({}),
-        )
-        
-        _LOGGER.info("Registered service: %s.%s", DOMAIN, service_name)
-        return True
-    except Exception as err:
-        _LOGGER.error("Error setting up Jira Filters integration: %s", err)
-        return False
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    _async_register_legacy_service(hass, entry)
+    return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    try:
-        # Try newer API first
-        unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
-    except AttributeError:
-        # Fallback to older API
-        unload_ok = await hass.config_entries.async_forward_entry_unload(entry, "sensor")
-    
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        # Unregister services
-        connection_name = entry.data.get("name", "Jira")
-        service_name = f"refresh_{connection_name.lower().replace(' ', '_')}"
-        
-        try:
-            hass.services.async_remove(DOMAIN, service_name)
-            _LOGGER.info("Unregistered service: %s.%s", DOMAIN, service_name)
-        except ValueError:
-            # Service might not exist, which is fine
-            pass
-        
-        hass.data[DOMAIN].pop(entry.entry_id)
-
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id, {})
+        legacy_service = entry_data.get("legacy_service")
+        if legacy_service and hass.services.has_service(DOMAIN, legacy_service):
+            hass.services.async_remove(DOMAIN, legacy_service)
     return unload_ok
+
+
+def _legacy_service_name(entry: ConfigEntry) -> str:
+    """Per-connection action name kept for existing automations."""
+    return f"refresh_{slugify(entry.data.get('name') or 'jira')}"
+
+
+@callback
+def _async_register_legacy_service(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Register the deprecated jira_filters.refresh_<connection> action."""
+    service_name = _legacy_service_name(entry)
+    if service_name == SERVICE_REFRESH or hass.services.has_service(DOMAIN, service_name):
+        _LOGGER.debug("Not registering %s.%s: name already in use", DOMAIN, service_name)
+        return
+
+    async def _handle(call: ServiceCall) -> None:
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        await coordinator.async_refresh()
+
+    hass.services.async_register(DOMAIN, service_name, _handle, schema=vol.Schema({}))
+    hass.data[DOMAIN][entry.entry_id]["legacy_service"] = service_name
+
+
+async def _async_handle_refresh(call: ServiceCall) -> None:
+    """Refresh one connection, or all connections when none is given."""
+    hass = call.hass
+    entries = hass.data.get(DOMAIN, {})
+    entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
+
+    if entry_id:
+        if entry_id not in entries:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="entry_not_loaded",
+                translation_placeholders={"entry_id": entry_id},
+            )
+        targets = [entries[entry_id]]
+    else:
+        targets = list(entries.values())
+
+    for entry_data in targets:
+        await entry_data["coordinator"].async_refresh()

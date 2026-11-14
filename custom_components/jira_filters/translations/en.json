@@ -118,7 +118,18 @@
   "services": {
     "refresh": {
       "name": "Refresh",
-      "description": "Manually refresh Jira Filters data for this connection"
+      "description": "Fetch the latest data from Jira now.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Connection",
+          "description": "The Jira connection to refresh. Leave empty to refresh all connections."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_loaded": {
+      "message": "Jira Filters connection {entry_id} is not loaded."
     }
   }
 }

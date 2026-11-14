@@ -17,7 +17,7 @@ Turn your saved **Jira Cloud filters** into Home Assistant sensors. Each sensor 
 - Filter names fetched from Jira automatically (or set your own)
 - Top 10 issues and the most recently updated ticket as attributes
 - Add, edit and remove filters from the UI — no restart needed
-- Manual refresh action per connection
+- `jira_filters.refresh` action to update on demand
 
 ## Installation
 
@@ -84,11 +84,15 @@ Each filter creates a sensor, e.g. `sensor.jira_filter_my_open_issues`.
 
 ## Actions
 
-Each connection gets a refresh action named after the connection, for example `jira_filters.refresh_production` for a connection named "Production".
+`jira_filters.refresh` fetches the latest data from Jira straight away. Pick a connection to refresh just that one, or leave it empty to refresh all of them.
 
 ```yaml
-action: jira_filters.refresh_production
+action: jira_filters.refresh
+data:
+  config_entry_id: 01JABCDEF...   # optional
 ```
+
+> The older per-connection actions (for example `jira_filters.refresh_production`) still work but are deprecated. Switch automations to `jira_filters.refresh`.
 
 ## Examples
 

@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 
 DOMAIN = "jira_filters"
 
+SERVICE_REFRESH = "refresh"
+
 # Unique ID prefix used before v1.2.0 (not scoped to a config entry)
 LEGACY_UNIQUE_ID_PREFIX = "jira_filter_"
 
