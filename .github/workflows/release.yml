@@ -33,6 +33,9 @@ jobs:
           files: dist/jira_filters.zip
           overwrite_files: true
           generate_release_notes: true
+          # Tags like v1.2.0-beta.1 become pre-releases and are not marked latest
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
